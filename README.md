@@ -1,15 +1,12 @@
 # i2c-input-device
 ## 概要
-- I2Cスレーブとして動作するデバイス。
-- ATmega328P + タクトスイッチ + ロータリーエンコーダー
+- I2C スレーブとして、入力状態を 2バイト固定で返す
+- Core: ATmega328P, 3.3V, internal 8MHz
+- ボタン 5個 + ロータリーエンコーダ（A/B, スイッチ無し）
 - GitHubの練習のためのリポジトリ
 - 未完成
 
 ## 出力
-- InputDevice (ATmega328P, 3.3V, internal 8MHz)
-  - I2C スレーブとして、入力状態を 2バイト固定で返す
-  - ボタン 5個 + ロータリーエンコーダ（A/B, スイッチ無し）
-
 - I2C 応答フォーマット（Read 2 bytes）
   - Byte0: enc_delta (int8_t)
       - 前回 Read 以降の差分
