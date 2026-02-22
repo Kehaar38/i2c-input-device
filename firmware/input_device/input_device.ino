@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <Arduino.h>
+#include <util/atomic.h>
 
 // ================================
 // User config
@@ -142,21 +143,18 @@ void onI2CRequest() {
   uint8_t btnSnap;
   uint8_t stSnap;
 
-  cli();
-  encSnap = g_encAcc;
-  g_encAcc = 0;        // reset-on-read as requested
-  g_qstepAcc = 0;      // also reset partial steps to avoid odd carry
-  btnSnap = g_btnMask5;
-  stSnap  = g_status3;
-  g_status3 = 0;       // clear status after reporting (so overflow is edge-detected)
-  sei();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    encSnap = g_encAcc;
+    g_encAcc = 0;      // reset-on-read
+    g_qstepAcc = 0;
+    btnSnap = g_btnMask5;
+    stSnap  = g_status3;
+    g_status3 = 0;
+  }
 
   bool clamped = false;
   int8_t encOut = clamp_i16_to_i8(encSnap, clamped);
-  if (clamped) {
-    // If encSnap doesn't fit, mark overflow in the returned status
-    stSnap = 0x01;
-  }
+  if (clamped) stSnap = 0x01;
 
   uint8_t out0 = (uint8_t)encOut;
   uint8_t out1 = (uint8_t)(((stSnap & 0x07) << 5) | (btnSnap & 0x1F));
