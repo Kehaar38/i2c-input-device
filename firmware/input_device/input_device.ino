@@ -1,6 +1,11 @@
 #include <Wire.h>
 #include <Arduino.h>
 #include <util/atomic.h>
+#include <avr/interrupt.h>
+
+ISR(PCINT2_vect) {
+  isr_encoder_change();
+}
 
 // ================================
 // User config
@@ -201,9 +206,14 @@ void setup() {
   pinMode(PIN_ENC_B, INPUT_PULLUP);
   g_prevAB = readAB();
 
-  // Attach interrupts on both lines
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), isr_encoder_change, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), isr_encoder_change, CHANGE);
+  // ---- Enable PCINT for PD6/PD7 (PCINT22/23) ----
+  // PCICR: Pin Change Interrupt Control Register
+  // PCIE2 enables PCINT[23:16] group (Port D)
+  PCICR |= (1 << PCIE2);
+
+  // PCMSK2: Pin Change Mask Register 2 (Port D)
+  PCMSK2 |= (1 << PCINT22); // PD6
+  PCMSK2 |= (1 << PCINT23); // PD7
 
   // I2C slave
   Wire.begin(I2C_ADDR);
