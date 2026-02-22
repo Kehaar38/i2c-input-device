@@ -1,60 +1,91 @@
-#include <Wire.h>
+/*
+  InputDevice (ATmega328P, 3.3V, internal 8MHz)
+  - I2C スレーブとして、入力状態を 2バイト固定で返す
+  - ボタン 5個 + ロータリーエンコーダ（A/B, スイッチ無し）
+
+  I2C 応答フォーマット（Read 2 bytes）
+    Byte0: enc_delta (int8_t)
+      - 前回 Read 以降の差分
+      - -128..127 に飽和（超えたら status=001 を立てる）
+      - Read したタイミングで g_encAcc を 0 にリセット（差分式）
+
+    Byte1: 上位3bit=status, 下位5bit=buttons
+      bit0: center
+      bit1: up
+      bit2: right
+      bit3: down
+      bit4: left
+      status:
+        000 = 正常
+        001 = overflow（飽和/内部飽和などの異常を検出）
+*/
+
 #include <Arduino.h>
+#include <Wire.h>
+
 #include <util/atomic.h>
 #include <avr/interrupt.h>
 
-ISR(PCINT2_vect) {
-  isr_encoder_change();
-}
-
 // ================================
-// User config
+// ユーザー設定
 // ================================
 static const uint8_t I2C_ADDR = 0x12;
 
-// Buttons (INPUT_PULLUP)
-// bit0:center, bit1:up, bit2:right, bit3:down, bit4:left
+// ボタン（INPUT_PULLUP）
+// 物理的には「押すとGNDへ落ちる」
+// 出力（ビットマスク）は「押下=1」に揃える
 static const uint8_t PIN_BTN_CENTER = PD1;
 static const uint8_t PIN_BTN_UP     = PD2;
 static const uint8_t PIN_BTN_RIGHT  = PD3;
 static const uint8_t PIN_BTN_DOWN   = PD4;
 static const uint8_t PIN_BTN_LEFT   = PD0;
 
-// Rotary encoder pins (quadrature A/B). No switch.
+// エンコーダ（A/B, INPUT_PULLUP）
 static const uint8_t PIN_ENC_A = PD6; // PCINT22
 static const uint8_t PIN_ENC_B = PD7; // PCINT23
 
-// Many encoders: 1 detent = 4 valid quadrature steps (4x decode).
-// Some are 2. You can tune after you test.
-static const int8_t ENC_STEPS_PER_NOTCH = 4;
+// 1クリック（カチッ）あたりの「有効遷移数」
+// エンコーダ個体によって 1/2/4 等があるので、実測で合わせる。
+static const int8_t ENC_STEPS_PER_NOTCH = 2;
 
-// How often to sample buttons for debounce (ms)
+// 右回りを + にしたい場合 true（符号反転）
+// もし逆だったら false にするだけでOK
+static const bool ENC_DIR_REVERSE = true;
+
+// ボタンのサンプリング周期（ms）
 static const uint16_t BTN_SAMPLE_MS = 1;
 
 // ================================
-// Shared state (ISR + I2C)
+// 共有状態（ISR + I2C）
 // ================================
-volatile int16_t g_encAcc = 0;        // accumulated "notches" (can be >127)
-volatile int8_t  g_qstepAcc = 0;      // accumulated quadrature steps toward one notch
-volatile uint8_t g_status3 = 0;       // 3-bit status (000 normal, 001 overflow)
-volatile uint8_t g_btnMask5 = 0;      // 5-bit buttons (pressed=1)
+// エンコーダ：差分累積（Readしたら0にリセット）
+volatile int16_t g_encAcc = 0;
+
+// エンコーダ：クリック換算前の途中経過（クォドラチャステップ）
+// ※ これを I2C Read 毎に 0 にすると、ゆっくり回した時に反応しなくなるので保持する
+volatile int8_t g_qstepAcc = 0;
+
+// status（3bit）: 000=OK, 001=overflow
+volatile uint8_t g_status3 = 0;
+
+// ボタン（5bit, 押下=1）
+volatile uint8_t g_btnMask5 = 0;
 
 // ================================
-// Helpers
+// ヘルパ
 // ================================
 static inline void set_overflow_flag() {
-  // status 001
-  g_status3 = 0x01;
+  g_status3 = 0x01; // 001
 }
 
 static inline int8_t clamp_i16_to_i8(int16_t v, bool &clamped) {
-  if (v > 127) { clamped = true; return 127; }
+  if (v > 127)  { clamped = true; return 127; }
   if (v < -128) { clamped = true; return -128; }
   clamped = false;
   return (int8_t)v;
 }
 
-// Safe saturating add for int16 accumulation (prevents wrap).
+// g_encAcc を int16 範囲で飽和加算（wrap防止）
 static inline void encAcc_add_saturating(int16_t delta) {
   int32_t tmp = (int32_t)g_encAcc + (int32_t)delta;
   if (tmp > 32767) {
@@ -69,10 +100,8 @@ static inline void encAcc_add_saturating(int16_t delta) {
 }
 
 // ================================
-// Encoder ISR (quadrature 4x step)
+// エンコーダ：クォドラチャデコード（PCINT）
 // ================================
-// Use a small state table: prev(2bit) -> curr(2bit)
-// valid transitions yield +1/-1 "quadrature step"
 volatile uint8_t g_prevAB = 0;
 
 static inline uint8_t readAB() {
@@ -81,30 +110,40 @@ static inline uint8_t readAB() {
   return (uint8_t)((a << 1) | b);
 }
 
-void isr_encoder_change() {
-  uint8_t curr = readAB();
-  uint8_t prev = g_prevAB;
-  g_prevAB = curr;
+// A/Bの状態遷移から +1/-1 のクォドラチャステップを生成する
+// 不正遷移（チャタ/ノイズ）は 0 扱いで捨てる
+static inline int8_t quadrature_step(uint8_t prevAB, uint8_t currAB) {
+  const uint8_t t = (uint8_t)((prevAB << 2) | currAB);
 
-  // transition code: prev<<2 | curr (0..15)
-  uint8_t t = (uint8_t)((prev << 2) | curr);
-
-  // Table for quadrature: +1, -1, or 0 (invalid/no move)
-  // This table assumes standard Gray sequence.
+  // 0..15 の遷移に対するステップ（標準Gray系列前提）
   static const int8_t stepTable[16] = {
-    0, -1, +1,  0,
-   +1,  0,  0, -1,
-   -1,  0,  0, +1,
-    0, +1, -1,  0
+     0, -1, +1,  0,
+    +1,  0,  0, -1,
+    -1,  0,  0, +1,
+     0, +1, -1,  0
   };
 
-  int8_t qstep = stepTable[t];
+  int8_t s = stepTable[t];
+
+  // 回転方向の符号を反転（右回りを + に合わせたい時に使う）
+  if (ENC_DIR_REVERSE) s = (int8_t)-s;
+
+  return s;
+}
+
+// PCINTが来たらA/B変化を1回処理する
+void isr_encoder_change() {
+  const uint8_t curr = readAB();
+  const uint8_t prev = g_prevAB;
+  g_prevAB = curr;
+
+  int8_t qstep = quadrature_step(prev, curr);
   if (qstep == 0) return;
 
-  // Accumulate quadrature steps and convert to "notches"
-  int8_t qs = g_qstepAcc + qstep;
-  g_qstepAcc = qs;
+  // クリック換算用にクォドラチャステップを累積
+  g_qstepAcc = (int8_t)(g_qstepAcc + qstep);
 
+  // クリック単位（±1）へ変換
   if (ENC_STEPS_PER_NOTCH > 0) {
     while (g_qstepAcc >= ENC_STEPS_PER_NOTCH) {
       g_qstepAcc -= ENC_STEPS_PER_NOTCH;
@@ -117,61 +156,37 @@ void isr_encoder_change() {
   }
 }
 
+// Port D（PCINT[23:16]）のピン変化割り込み
+ISR(PCINT2_vect) {
+  isr_encoder_change();
+}
+
 // ================================
-// Button debounce (5 buttons)
-// shift-register debounce: 8-sample history
-// pressed when history becomes all 0 (because INPUT_PULLUP)
+// ボタン：簡易デバウンス（8サンプルのシフトレジスタ）
 // ================================
 struct Debounce8 {
-  uint8_t hist = 0xFF; // start released (pullup=1)
+  uint8_t hist = 0xFF;      // pullup=1 なので未押下を 1 とする
   bool stablePressed = false;
 
   void update(bool pinHigh) {
     hist = (uint8_t)((hist << 1) | (pinHigh ? 1 : 0));
-    // stable pressed if last 8 samples are 0
-    if (hist == 0x00) stablePressed = true;
-    // stable released if last 8 samples are 1
-    else if (hist == 0xFF) stablePressed = false;
+    if (hist == 0x00) stablePressed = true;   // 連続0 -> 押下安定
+    else if (hist == 0xFF) stablePressed = false; // 連続1 -> 未押下安定
   }
 };
 
 Debounce8 db_center, db_up, db_right, db_down, db_left;
 
-// ================================
-// I2C onRequest: return 2 bytes
-// Byte0: int8 enc_delta (clamped), then reset accum to 0
-// Byte1: (status3<<5) | buttons5
-// Also clears status after read (optional; here we clear to 000 on each read)
-// ================================
-void onI2CRequest() {
-  int16_t encSnap;
-  uint8_t btnSnap;
-  uint8_t stSnap;
-
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    encSnap = g_encAcc;
-    g_encAcc = 0;      // reset-on-read
-    g_qstepAcc = 0;
-    btnSnap = g_btnMask5;
-    stSnap  = g_status3;
-    g_status3 = 0;
-  }
-
-  bool clamped = false;
-  int8_t encOut = clamp_i16_to_i8(encSnap, clamped);
-  if (clamped) stSnap = 0x01;
-
-  uint8_t out0 = (uint8_t)encOut;
-  uint8_t out1 = (uint8_t)(((stSnap & 0x07) << 5) | (btnSnap & 0x1F));
-
-  Wire.write(out0);
-  Wire.write(out1);
+// 押下状態を 5bit にパック（押下=1）
+static inline uint8_t packButtons5() {
+  uint8_t m = 0;
+  if (db_center.stablePressed) m |= (1 << 0);
+  if (db_up.stablePressed)     m |= (1 << 1);
+  if (db_right.stablePressed)  m |= (1 << 2);
+  if (db_down.stablePressed)   m |= (1 << 3);
+  if (db_left.stablePressed)   m |= (1 << 4);
+  return m;
 }
-
-// ================================
-// Setup/Loop
-// ================================
-uint32_t lastBtnMs = 0;
 
 static inline void updateButtonsDebounced() {
   db_center.update(digitalRead(PIN_BTN_CENTER));
@@ -180,46 +195,72 @@ static inline void updateButtonsDebounced() {
   db_down.update(digitalRead(PIN_BTN_DOWN));
   db_left.update(digitalRead(PIN_BTN_LEFT));
 
-  // Pack (pressed=1)
-  uint8_t m = 0;
-  if (db_center.stablePressed) m |= (1 << 0);
-  if (db_up.stablePressed)     m |= (1 << 1);
-  if (db_right.stablePressed)  m |= (1 << 2);
-  if (db_down.stablePressed)   m |= (1 << 3);
-  if (db_left.stablePressed)   m |= (1 << 4);
+  const uint8_t m = packButtons5();
 
-  cli();
-  g_btnMask5 = m;
-  sei();
+  // g_btnMask5 はISRからも参照され得るので、原子更新にする
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    g_btnMask5 = m;
+  }
 }
 
+// ================================
+// I2C：Read要求が来たら 2バイト返す
+// ================================
+void onI2CRequest() {
+  int16_t encSnap;
+  uint8_t btnSnap;
+  uint8_t stSnap;
+
+  // 共有変数をスナップショットし、必要なものだけクリアする
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    encSnap = g_encAcc;
+    g_encAcc = 0;     // 差分式：読んだら0にする
+    // g_qstepAcc は保持（途中経過を捨てない）
+    btnSnap = g_btnMask5;
+    stSnap  = g_status3;
+    g_status3 = 0;    // statusは読んだらクリア（必要なら保持方式に変更可）
+  }
+
+  // encSnap を int8 に飽和
+  bool clamped = false;
+  int8_t encOut = clamp_i16_to_i8(encSnap, clamped);
+  if (clamped) stSnap = 0x01; // overflow
+
+  const uint8_t out0 = (uint8_t)encOut;
+  const uint8_t out1 = (uint8_t)(((stSnap & 0x07) << 5) | (btnSnap & 0x1F));
+
+  Wire.write(out0);
+  Wire.write(out1);
+}
+
+// ================================
+// setup / loop
+// ================================
+uint32_t lastBtnMs = 0;
+
 void setup() {
-  // Buttons
+  // ボタン入力
   pinMode(PIN_BTN_CENTER, INPUT_PULLUP);
   pinMode(PIN_BTN_UP,     INPUT_PULLUP);
   pinMode(PIN_BTN_RIGHT,  INPUT_PULLUP);
   pinMode(PIN_BTN_DOWN,   INPUT_PULLUP);
   pinMode(PIN_BTN_LEFT,   INPUT_PULLUP);
 
-  // Encoder
+  // エンコーダ入力
   pinMode(PIN_ENC_A, INPUT_PULLUP);
   pinMode(PIN_ENC_B, INPUT_PULLUP);
   g_prevAB = readAB();
 
-  // ---- Enable PCINT for PD6/PD7 (PCINT22/23) ----
-  // PCICR: Pin Change Interrupt Control Register
-  // PCIE2 enables PCINT[23:16] group (Port D)
-  PCICR |= (1 << PCIE2);
+  // PCINT（Port D）を有効化：PD6/PD7（PCINT22/23）
+  PCICR  |= (1 << PCIE2);
+  PCMSK2 |= (1 << PCINT22);
+  PCMSK2 |= (1 << PCINT23);
 
-  // PCMSK2: Pin Change Mask Register 2 (Port D)
-  PCMSK2 |= (1 << PCINT22); // PD6
-  PCMSK2 |= (1 << PCINT23); // PD7
-
-  // I2C slave
+  // I2Cスレーブ開始
   Wire.begin(I2C_ADDR);
   Wire.onRequest(onI2CRequest);
 
-  // Prime debounce history quickly
+  // デバウンス初期化（短時間で安定状態に寄せる）
   for (int i = 0; i < 16; i++) {
     updateButtonsDebounced();
     delay(1);
@@ -228,11 +269,10 @@ void setup() {
 }
 
 void loop() {
-  uint32_t now = millis();
+  // ボタンは一定周期で更新
+  const uint32_t now = millis();
   if ((uint32_t)(now - lastBtnMs) >= BTN_SAMPLE_MS) {
     lastBtnMs = now;
     updateButtonsDebounced();
   }
-
-  // (Optional) you can add diagnostics over Serial here during early bring-up
 }
