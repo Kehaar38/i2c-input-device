@@ -8,15 +8,15 @@ static const uint8_t I2C_ADDR = 0x12;
 
 // Buttons (INPUT_PULLUP)
 // bit0:center, bit1:up, bit2:right, bit3:down, bit4:left
-static const uint8_t PIN_BTN_CENTER = 4;
-static const uint8_t PIN_BTN_UP     = 5;
-static const uint8_t PIN_BTN_RIGHT  = 6;
-static const uint8_t PIN_BTN_DOWN   = 7;
-static const uint8_t PIN_BTN_LEFT   = 8;
+static const uint8_t PIN_BTN_CENTER = PD1;
+static const uint8_t PIN_BTN_UP     = PD2;
+static const uint8_t PIN_BTN_RIGHT  = PD3;
+static const uint8_t PIN_BTN_DOWN   = PD4;
+static const uint8_t PIN_BTN_LEFT   = PD0;
 
 // Rotary encoder pins (quadrature A/B). No switch.
-static const uint8_t PIN_ENC_A = 2; // INT0
-static const uint8_t PIN_ENC_B = 3; // INT1
+static const uint8_t PIN_ENC_A = PD6; // PCINT22
+static const uint8_t PIN_ENC_B = PD7; // PCINT23
 
 // Many encoders: 1 detent = 4 valid quadrature steps (4x decode).
 // Some are 2. You can tune after you test.
