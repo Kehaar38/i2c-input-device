@@ -22,3 +22,25 @@
     - status:
       - 000 = 正常
       - 001 = overflow（飽和/内部飽和などの異常を検出）
+
+## イメージ
+動作テスト
+
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/%E3%83%86%E3%82%B9%E3%83%88%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9.jpg" />
+
+外観
+
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/%E5%A4%96%E8%A6%B3.jpg" />
+
+基板
+
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/%E5%9F%BA%E6%9D%BF%E8%A1%A8.jpg" />
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/%E5%9F%BA%E6%9D%BF%E8%A3%8F.jpg" />
+
+回路図
+
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/%E5%9B%9E%E8%B7%AF%E5%9B%B3.png" />
+
+3D
+
+<img width="400" height="300" alt="Image" src="https://github.com/Kehaar38/i2c-input-device/blob/main/image/3D.png" />
