@@ -12,6 +12,7 @@ static const uint32_t I2C_FREQ = 100000;  // 100kHz (safe)
 static const uint32_t POLL_MS = 50;
 
 // Button bit mapping (Byte1 low 5 bits)
+// bit0:center, bit1:up, bit2:right, bit3:down, bit4:left
 enum ButtonBits : uint8_t {
   BTN_CENTER = 1 << 0,
   BTN_UP     = 1 << 1,
@@ -70,6 +71,9 @@ void loop() {
   static int8_t lastEnc = 0;
   static uint8_t lastByte1 = 0;
 
+  // ★追加：ロータリーの累積（合計値）
+  static int32_t encTotal = 0;
+
   uint32_t now = millis();
   if (now - lastMs < POLL_MS) return;
   lastMs = now;
@@ -78,7 +82,6 @@ void loop() {
   Wire.requestFrom((int)I2C_ADDR, 2);
   if (Wire.available() < 2) {
     Serial.println("I2C read failed: not enough bytes (check wiring/address/pullups)");
-    // Drain if any
     while (Wire.available()) (void)Wire.read();
     return;
   }
@@ -86,15 +89,25 @@ void loop() {
   uint8_t b0 = Wire.read();
   uint8_t b1 = Wire.read();
 
-  int8_t enc = (int8_t)b0;
+  int8_t encDelta = (int8_t)b0;
   uint8_t buttons5 = b1 & 0x1F;
   uint8_t status3  = (b1 >> 5) & 0x07;
 
+  // ★追加：delta を累積して total を作る
+  if (encDelta != 0) {
+    encTotal += (int32_t)encDelta;
+  }
+
   // Print only when something changes OR encoder nonzero OR overflow flag
-  bool changed = (enc != 0) || (b1 != lastByte1) || (enc != lastEnc) || (status3 != 0);
+  bool changed = (encDelta != 0) || (b1 != lastByte1) || (encDelta != lastEnc) || (status3 != 0);
   if (changed) {
     Serial.print("enc_delta=");
-    Serial.print(enc);
+    Serial.print(encDelta);
+
+    // ★追加：累積（合計）を表示
+    Serial.print("  enc_total=");
+    Serial.print(encTotal);
+
     Serial.print("  ");
     printStatus(status3);
     Serial.print("  ");
@@ -106,6 +119,6 @@ void loop() {
     Serial.println("]");
   }
 
-  lastEnc = enc;
+  lastEnc = encDelta;
   lastByte1 = b1;
 }
