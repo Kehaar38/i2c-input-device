@@ -24,23 +24,27 @@
       - 001 = overflow（飽和/内部飽和などの異常を検出）
 
 ## イメージ
-動作テスト
+動作確認
 
-<img width="400" height="300" alt="動作テスト" src="images/%E3%83%86%E3%82%B9%E3%83%88%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9.jpg" />
+<img width="400" height="300" alt="動作テスト" src="images/operation_confirmation.jpg" />
 
 外観
 
-<img width="400" height="300" alt="外観" src="images/%E5%A4%96%E8%A6%B3.jpg" />
+<img width="400" height="300" alt="外観" src="images/input_device_exterior.jpg" />
 
 基板
 
-<img width="400" height="300" alt="基板表" src="images/%E5%9F%BA%E6%9D%BF%E8%A1%A8.jpg" />
-<img width="400" height="300" alt="基板裏" src="images/%E5%9F%BA%E6%9D%BF%E8%A3%8F.jpg" />
+<img width="400" height="300" alt="基板表" src="images/input_device_circuit_board_front.jpg" />
+<img width="400" height="300" alt="基板裏" src="images/input_device_circuit_board_back.jpg" />
 
 回路図
 
-<img width="400" height="300" alt="回路図" src="images/%E5%9B%9E%E8%B7%AF%E5%9B%B3.png" />
+<img width="400" height="300" alt="回路図" src="images/input_device_circuit_diagram.png" />
 
-3D
+3Dモデル
 
-<img width="400" height="300" alt="3D" src="images/3D.png" />
+<img width="400" height="300" alt="3D" src="images/input_device_3D_model.png" />
+
+テスト用デバイス
+
+<img width="400" height="300" alt="3D" src="images/test_device_exterior.jpg" />
