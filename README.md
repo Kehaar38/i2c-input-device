@@ -1,10 +1,14 @@
-# i2c-input-device
+# I2C Input Device (ATmega328P)
+
 ## 概要
-- I2C スレーブとして、入力状態を 2バイト固定で返す
-- Core: ATmega328P, 3.3V, internal 8MHz
-- ボタン 5個 + ロータリーエンコーダ（A/B, スイッチ無し）
-- GitHubの練習のためのリポジトリ
-- 未完成
+ATmega328P を用いた I2C接続入力デバイス。  
+5ボタン＋ロータリーエンコーダーを搭載。  
+差分式エンコーダ出力およびステータスビットを2バイト固定フォーマットで提供。
+
+## 主な機能
+- I2Cスレーブ（0x12）
+- 2バイト固定レスポンス
+- 差分式エンコーダー
 
 ## 出力
 - I2C 応答フォーマット（Read 2 bytes）
@@ -23,11 +27,13 @@
       - 000 = 正常
       - 001 = overflow（飽和/内部飽和などの異常を検出）
 
-## イメージ
-動作確認
+## ハード構成
+- ATmega328P (3.3V, internal 8MHz)
+- 5x tactile switch
+- 12/15 encoder
+- SSD1306 (test device)
 
-<img width="400" height="300" alt="動作テスト" src="images/operation_confirmation.jpg" />
-
+## 写真
 外観
 
 <img width="400" height="300" alt="外観" src="images/input_device_exterior.jpg" />
@@ -45,6 +51,81 @@
 
 <img width="400" height="300" alt="3D" src="images/input_device_3D_model.png" />
 
-テスト用デバイス
+## ビルド方法
+### 開発環境
+- Arduino IDE 2.3.7
+- ボードパッケージ: ATmega328（MiniCore系）
+- 書き込み方式: Arduino as ISP
+- ターゲット: ATmega328P（3.3V / 内部8MHz）
+### ボード設定
+- ボード: ATmega328
+- Variant: 328P / 328PA
+- Clock: Internal 8 MHz
+- Bootloader: No bootloader
+- BOD: BOD 2.7V
+- EEPROM: EEPROM retained
+- Compiler LTO: LTO enabled
+### Fuse値
+|Fuse|値|意味|
+|---|---|---|
+|L|E2|内部8MHz、CKDIV8無効|
+|H|DA|SPI有効、BOOT無効|
+|E|FD|BOD有効|
+### I2C動作条件
+- 電源: 3.3V
+- クロック: 100kHz
+- I2Cアドレス: 0x12
+- 外部プルアップ抵抗はマスター側に実装
+### 注意事項
+- attachInterrupt は使用せず、PCINT を使用している
+- onRequest 内で割り込み状態を変更しないこと
+- ENC_STEPS_PER_NOTCH はエンコーダ個体に応じて調整すること
+### 禁止事項
+#### 書き込み装置とマスターの同時接続は禁止
+本デバイスでは、
 
-<img width="400" height="300" alt="3D" src="images/test_device_exterior.jpg" />
+- InputDevice（ATmega328P）
+    
+- マスター機（I2C 3.3V）
+    
+- 書き込み装置（Arduino as ISP）
+    
+
+を**同時に接続しないこと**。
+
+##### 理由
+
+書き込み装置（Arduino as ISP）は  
+ICSP 経由で 5V 系信号を出力する可能性がある。
+
+一方、本デバイスは
+
+- 動作電圧: 3.3V
+    
+- I2C接続先: 3.3Vマスター
+    
+
+で設計している。
+
+そのため、
+
+InputDevice  
+ ├─ 3.3V マスター  
+ └─ 5V ISP
+
+という状態になると、
+
+- SDA/SCL ラインの逆流
+    
+- MCU I/O ピンへの過電圧
+    
+- 電源ラインのバックフィード
+    
+
+が発生し、**デバイス破損の可能性がある**。
+
+#### 対策
+
+- 書き込み時は必ずマスター側を取り外すこと
+    
+- 運用時は ISP ケーブルを接続しないこと
