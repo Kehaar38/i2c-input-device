@@ -31,7 +31,6 @@ ATmega328P を用いた I2C接続入力デバイス。
 - ATmega328P (3.3V, internal 8MHz)
 - 5x tactile switch
 - 12/15 encoder
-- SSD1306 (test device)
 
 ## 写真
 外観
