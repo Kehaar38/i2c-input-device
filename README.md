@@ -4,7 +4,7 @@
 - ATmega328P を用いた I2C接続の入力デバイス
 - 5ボタン＋ロータリーエンコーダーを搭載
 - 差分式エンコーダ出力およびステータスビットを2バイト固定フォーマットで出力
-- 動作テスト用デバイスも製作(Test Device)
+- 動作テスト用デバイスも製作（Test Device）
 
 ## 主な機能
 - I2Cスレーブ
@@ -13,12 +13,12 @@
 
 ## 出力
 I2C 応答フォーマット（Read 2 bytes）
-- Byte0: エンコーダー差分 (int8_t)
+- Byte0: エンコーダー差分（int8_t）
   - 前回 Read 以降の差分
     - -128..127 に飽和（超えたら status=001 を立てる）
     - Read したタイミングで g_encAcc を 0 にリセット（差分式）
 
-- Byte1: 上位3bit=ステータス, 下位5bit=ボタン押下(押下で1)
+- Byte1: 上位3bit=ステータス, 下位5bit=ボタン押下（押下で1）
   - bit0: center
   - bit1: up
   - bit2: right
@@ -26,7 +26,7 @@ I2C 応答フォーマット（Read 2 bytes）
   - bit4: left
   - status:
     - 000 = 正常
-    - 001 = overflow（飽和/内部飽和などの異常を検出）
+    - 001 = overflow
 
 ## ハード構成
 - ATmega328P (3.3V, internal 8MHz)
@@ -76,7 +76,7 @@ I2C 応答フォーマット（Read 2 bytes）
 - I2Cアドレス: 0x12
 - 外部プルアップ抵抗はマスター側に実装
 
-### 注意事項
+### 補足
 - attachInterrupt は使用せず、PCINT を使用している
 - onRequest 内で割り込み状態を変更しないこと
 - ENC_STEPS_PER_NOTCH はエンコーダ個体に応じて調整すること
