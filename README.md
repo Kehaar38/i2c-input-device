@@ -47,6 +47,9 @@ I2C 応答フォーマット（Read 2 bytes）
 
 <img width="400" height="300" alt="回路図" src="images/input_device_circuit_diagram.png" />
 
+## コーディング
+ほぼ全部ChatGPT5.2に書いてもらっています。
+
 ## ビルド方法
 ### 開発環境
 - Arduino IDE 2.3.7
