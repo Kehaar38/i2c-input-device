@@ -12,21 +12,21 @@
 - 差分式エンコーダー
 
 ## 出力
-- I2C 応答フォーマット（Read 2 bytes）
-  - Byte0: enc_delta (int8_t)
-      - 前回 Read 以降の差分
-      - -128..127 に飽和（超えたら status=001 を立てる）
-      - Read したタイミングで g_encAcc を 0 にリセット（差分式）
+I2C 応答フォーマット（Read 2 bytes）
+- Byte0: エンコーダー差分 (int8_t)
+  - 前回 Read 以降の差分
+    - -128..127 に飽和（超えたら status=001 を立てる）
+    - Read したタイミングで g_encAcc を 0 にリセット（差分式）
 
-  - Byte1: 上位3bit=status, 下位5bit=buttons
-    - bit0: center
-    - bit1: up
-    - bit2: right
-    - bit3: down
-    - bit4: left
-    - status:
-      - 000 = 正常
-      - 001 = overflow（飽和/内部飽和などの異常を検出）
+- Byte1: 上位3bit=ステータス, 下位5bit=ボタン押下(押下で1)
+  - bit0: center
+  - bit1: up
+  - bit2: right
+  - bit3: down
+  - bit4: left
+  - status:
+    - 000 = 正常
+    - 001 = overflow（飽和/内部飽和などの異常を検出）
 
 ## ハード構成
 - ATmega328P (3.3V, internal 8MHz)
