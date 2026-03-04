@@ -102,5 +102,8 @@ I2C 応答フォーマット（Read 2 bytes）
 - XIAO ESP32S3
 - 128x64 OLED (SSD1306 Driver)
 
+## コーディング
+全部ChatGPT5.2に書いてもらっています。
+
 ## 写真
 <img width="400" height="300" alt="外観" src="images/operation_confirmation.jpg" />
