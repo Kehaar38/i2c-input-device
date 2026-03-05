@@ -1,2 +1,9 @@
 # ArduinoIDE コンパイル中間ファイル(ディレクトリが露出)
 *.lst
+
+# Build outputs
+firmware/**/build/
+*.eep
+*.elf
+*.hex
+*.bin
