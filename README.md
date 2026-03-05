@@ -107,3 +107,12 @@ I2C 応答フォーマット（Read 2 bytes）
 
 ## 写真
 <img width="400" height="300" alt="外観" src="images/operation_confirmation.jpg" />
+
+---
+
+## License Notices
+
+Third-party license and notice information is available here:
+
+- `THIRD_PARTY_NOTICES.md`
+- `licenses/`
